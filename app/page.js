@@ -1,103 +1,196 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState, useEffect } from "react";
+import Navbar from "./components/Navbar";
+import MainWeatherCard from "./components/MainWeatherCard";
+import FiveDayForecast from "./components/FiveDayForecast";
+import TodayHighlights from "./components/TodayHighlights";
+import axios from "axios";
+import { Box, Typography, CircularProgress } from "@mui/material";
+
+const WeatherDashboard = () => {
+  const [weatherData, setWeatherData] = useState(null);
+  const [city, setCity] = useState("London");
+  const [airQualityData, setAirQualityData] = useState(null);
+  const [fiveDayForecast, setFiveDayForecast] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [condition, setCondition] = useState(null);
+  const [darkMode, setDarkMode] = useState(false);
+
+  // تابع تنظیم کلاس تم بر اساس وضعیت آب‌وهوا یا دارک مود
+  const updateTheme = (mainCondition) => {
+    if (darkMode) {
+      document.body.className = "dark-mode";
+      return;
+    }
+
+    switch (mainCondition?.toLowerCase()) {
+      case "clear":
+        document.body.className = "sunny-theme";
+        break;
+      case "rain":
+      case "drizzle":
+      case "thunderstorm":
+        document.body.className = "rainy-theme";
+        break;
+      case "clouds":
+        document.body.className = "cloudy-theme";
+        break;
+      case "snow":
+        document.body.className = "snowy-theme";
+        break;
+      default:
+        document.body.className = "default-theme";
+    }
+  };
+
+  const fetchAirQualityData = async (lat, lon) => {
+    const API_KEY = process.env.NEXT_PUBLIC_WEATHER_API_KEY;
+    try {
+      const response = await axios.get(
+        `https://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=${API_KEY}`
+      );
+      setAirQualityData(response.data.list[0]);
+    } catch (err) {
+      console.error("Error fetching air quality:", err);
+      setError("Error fetching air quality.");
+    }
+  };
+
+  const fetchWeatherData = async (cityName) => {
+    const API_KEY = process.env.NEXT_PUBLIC_WEATHER_API_KEY;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `https://api.openweathermap.org/data/2.5/weather?q=${cityName}&units=metric&appid=${API_KEY}`
+      );
+      const data = await response.json();
+
+      if (!response.ok)
+        throw new Error(data.message || "Failed to fetch weather data");
+
+      setWeatherData(data);
+      setCity(cityName);
+      setCondition(data.weather[0]?.main || null);
+      updateTheme(data.weather[0]?.main);
+
+      await fetchAirQualityData(data.coord.lat, data.coord.lon);
+
+      const forecastRes = await axios.get(
+        `https://api.openweathermap.org/data/2.5/forecast?q=${cityName}&units=metric&appid=${API_KEY}`
+      );
+      setFiveDayForecast(forecastRes.data);
+    } catch (err) {
+      console.error("ERROR:", err.message);
+      setError("Error: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchWeatherByCoords = async (lat, lon) => {
+    const API_KEY = process.env.NEXT_PUBLIC_WEATHER_API_KEY;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch(
+        `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${API_KEY}`
+      );
+      const data = await res.json();
+
+      if (!res.ok)
+        throw new Error(data.message || "Failed to fetch weather by coords");
+
+      setWeatherData(data);
+      setCity(`${data.name}`);
+      setCondition(data.weather[0]?.main || null);
+      updateTheme(data.weather[0]?.main);
+
+      await fetchAirQualityData(lat, lon);
+
+      const forecastRes = await axios.get(
+        `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&appid=${API_KEY}`
+      );
+      setFiveDayForecast(forecastRes.data);
+    } catch (err) {
+      console.error("Error with geolocation weather:", err.message);
+      setError("Failed to fetch location weather.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = async (input) => {
+    if (typeof input === "string") {
+      await fetchWeatherData(input);
+    } else if (typeof input === "object" && input.lat && input.lon) {
+      await fetchWeatherByCoords(input.lat, input.lon);
+    }
+  };
+
+  useEffect(() => {
+    fetchWeatherData(city);
+  }, [darkMode]);
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <Box>
+      <Navbar
+        onSearch={handleSearch}
+        onToggleDark={() => {
+          setDarkMode(!darkMode);
+          updateTheme(condition);
+        }}
+        darkMode={darkMode}
+      />
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      {loading && (
+        <Box textAlign="center" mt={4}>
+          <CircularProgress />
+          <Typography mt={2}>Loading...</Typography>
+        </Box>
+      )}
+
+      {error && (
+        <Typography color="error" textAlign="center" mt={4}>
+          {error}
+        </Typography>
+      )}
+
+      {weatherData && airQualityData && (
+        <Box display="flex" p={4} gap={4} flexWrap="wrap">
+          <Box flex={1} minWidth="300px">
+            <MainWeatherCard weatherData={weatherData} darkMode={darkMode}/>
+
+            <Typography variant="h6" fontWeight="bold" mt={3}>
+              5 Days Forecast
+            </Typography>
+
+            {fiveDayForecast && (
+              <FiveDayForecast forecastData={fiveDayForecast}  darkMode={darkMode}
+  weatherMain={weatherData?.weather?.[0]?.main} />
+            )}
+          </Box>
+
+          <Box
+            display="flex"
+            flexDirection="column"
+            gap={3}
+            flex={0.5}
+            minWidth="300px"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+            <TodayHighlights
+              weatherData={weatherData}
+              airQualityData={airQualityData}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+          </Box>
+        </Box>
+      )}
+    </Box>
   );
-}
+};
+
+export default WeatherDashboard;
